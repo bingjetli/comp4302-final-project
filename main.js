@@ -29,6 +29,9 @@
 var gl;
 var canvas;
 var program;
+var entities = [];
+var entities_to_delete = [];
+var entities_active_length;
 
 /** handles webgl setup and other processes at initialization time */
 function initialize(){
@@ -78,6 +81,21 @@ function onKeyUp(evt){
         default:
             console.log("key is up: " + key);
     }
+}
+
+/** handles synchronization of the entities array */
+function updateEntities(){
+
+    /** remove all entities marked for deletion */
+    for(var i = 0; i < entities_to_delete.length; i++){
+        entities.splice(entities_to_delete[i], 1);
+    }
+    
+    /** clear the entity deletion queue */
+    entities_to_delete.splice(0, entities_to_delete.length);
+
+    /** update the active entity length */
+    entities_active_length = entities.length;
 }
 
 /** handles entity movement and positions as a result of movement */
@@ -154,9 +172,12 @@ function update(){
      *  only modifies "component" data in "entities"
      */
 
-    /** update all systems
-     * then render entities
+    /** synchronize entity data first
+     * then update all systems
+     * finally render entities
      */
+    updateEntities();
+
     updateMovement();
     updateGravity();
     updateCollision();
@@ -175,6 +196,37 @@ window.onkeyup = onKeyUp(e);
  * entities are basically containers for "components"
  * "components" can be thought of as properties of an entity
  * e.g a "pipe entity" in game has "geometry", "position", "material", "texture", etc
+ * 
+ * entity-components-systems layout
+ * entities[]: array of all entities in the game
+ * entities_active_length: integer value counting all the active entities on the current frame
+ *  : new entities are added to the end of the array
+ *  : the value for this variable does not update until the next update frame
+ *  : therefore while the new entities are added to the array, it isn't active until the next update frame
+ *  : deleting entities are also not deleted until the next update frame
+ *  : deleted entities are instead marked in a separate array storing the indexes of entities to be removed from the entity array
+ *  : therefore entities queued to be deleted on the current frame won't interfere with the current frame
+ * entities_to_delete[]: array of all entities to be deleted on the next update frame
+ * 
+ * adding entities
+ * createEntity("entity_tag");
+ *  createEntity() creates a new entity with the specified tag, appends it to the end of the array and returns the index of the entity in the entities array
+ *  this new entity is not "active" until the next update frame because we won't update the entities_active_length value until the next update frame
+ *  this new entity however can still be modified in the meantime
+ * 
+ * deleting entities
+ * deleteEntity(8);
+ *  the parameter takes an integer value representing the index of that entity in the entities array
+ *  the entity is not deleted immediately but instead queued to be deleted on the next frame
+ *  this prevents bugs and strange behaviour caused by entities being deleted mid-frame before they were processed
+ *  this function stores the value of the next entity to be deleted in the entitites_to_delete array
+ * 
+ * the entity manager
+ *  updateEntities() is called on the beginning of every update frame
+ *      it removes all the entities queued to be deleted then updates the value of entities_active_length
+ *          this results in queued entities to be deleted and added entities to be active
+ *      it also clears the entities_to_delete array after removing the entities
+ *  we call this function before doing anything during the update frame to make sure the entities data is synchronized for the current update frame
 */
 
 /** creates and returns a new entity 
@@ -202,17 +254,21 @@ function createEntity(t){
         }
     };
 
-    return output_entity;
+    entities.push(output_entity);
+    return (entities.length - 1);
+}
+
+/** deleteEntity(int entity_reference) 
+ * marks the entity referenced to be deleted on the next update frame
+ * 
+ * e.g deleteEntity(4); marks the 4th entity in the entities array to be deleted on the next update frame
+*/
+function deleteEntity(e){
+    entities_to_delete.push(e);
 }
 
 /** TODO:
- * - create/add/remove components and entities
- * - setup entity/component manager to prevent desynchronization issues
- *  - what does this mean?
- *      - imagine a case where you add entities or components in the middle of an update
- *      all other operations modifying entities or components after that will be different from the operations before
- *      - solution: perform adding/removing on the beginning of the update frame,
- *          all other modifications are queued for the next update frame
+ * - create/add/remove components
  * - design the rest of the rendering pipeline
  * - design the rest of the ECS (Entity-Component-Systems) engine
  * - implement designs
