@@ -109,3 +109,21 @@ function verticiesComponent(v){
 
     return output_component;
 }
+
+/** projectionComponent(fov, aspect, near, far) 
+ * creates and returns a perspective projection component
+*/
+function projectionComponent(fo, a, n, fa){
+    var output_component = {
+        tag:"projection",
+        fov:fo,
+        aspect:a,
+        near:n,
+        far:fa,
+        getProjectionMatrix:function(){
+            return perspective(this.fov, this.aspect, this.near, this.far);
+        }
+    };
+
+    return output_component;
+}

@@ -29,9 +29,21 @@
 var gl;
 var canvas;
 var program;
+
 var entities = [];
 var entities_to_delete = [];
 var entities_active_length;
+
+var camera;
+
+var controls = {
+    camera_forward:false,
+    camera_backward:false,
+    camera_left:false,
+    camera_right:false,
+    camera_up:false,
+    camera_down:false
+};
 
 /** handles webgl setup and other processes at initialization time */
 window.onload = function initialize(){
@@ -56,12 +68,18 @@ window.onload = function initialize(){
     var entity1 = createEntity("entity1");
     var entity2 = createEntity("entity2");
     var entity3 = createEntity("entity3");
-    var cube_entity = createEntity("cube");
 
     entities[entity1].addComponent(testComponent("component1-1"));
     entities[entity2].addComponent(testComponent("component1-2"));
     entities[entity3].addComponent(testComponent("component1-3"));
+
+    var cube_entity = createEntity("cube");
     entities[cube_entity].addComponent(verticiesComponent(generateCubeVerticies()));
+
+    /** create camera */
+    camera = createEntity("camera");
+    entities[camera].addComponent(positionComponent(1, 1, 3, 1));
+    entities[camera].addComponent(projectionComponent(90, (canvas.width/canvas.height), 0.1, 100));
 
     /* enter main update loop */
     update();
@@ -78,6 +96,24 @@ window.onkeydown = function onKeyDown(evt){
              */
             console.log("flapping wings!");
             break;
+        case 'W':
+            controls.camera_forward = true;
+            break;
+        case 'S':
+            controls.camera_backward = true;
+            break;
+        case 'A':
+            controls.camera_left = true;
+            break;
+        case 'D':
+            controls.camera_right = true;
+            break;
+        case 'Q':
+            controls.camera_up = true;
+            break;
+        case 'E':
+            controls.camera_down = true;
+            break;
         default:
             console.log("key is down: " + key);
     }
@@ -90,15 +126,23 @@ window.onkeyup = function onKeyUp(evt){
         case 'F':
             console.log("not flapping wings anymore!");
             break;
-
-        case 'T':
-            deleteEntity(0);
+        case 'W':
+            controls.camera_forward = false;
             break;
-        case 'P':
-            console.log(entities);
+        case 'S':
+            controls.camera_backward = false;
             break;
-        case 'Y':
-            entities[0].deleteComponent(0);
+        case 'A':
+            controls.camera_left = false;
+            break;
+        case 'D':
+            controls.camera_right = false;
+            break;
+        case 'Q':
+            controls.camera_up = false;
+            break;
+        case 'E':
+            controls.camera_down = false;
             break;
         default:
             console.log("key is up: " + key);
@@ -177,6 +221,50 @@ function updateCamera(){
      *  set what the camera should look at,
      *      - probably player position + some units forward (forward_offset)
      */
+
+    /** setup camera and projection */
+    var projection_component = entities[camera].findComponent("projection");
+    var position_component = entities[camera].findComponent("position");
+
+    /** update camera position */
+    if(controls.camera_forward){
+        entities[camera].components[position_component].z -= 0.1;
+    }
+    if(controls.camera_backward){
+        entities[camera].components[position_component].z += 0.1;
+    }
+    if(controls.camera_up){
+        entities[camera].components[position_component].y += 0.1;
+    }
+    if(controls.camera_down){
+        entities[camera].components[position_component].y -= 0.1;
+    }
+    if(controls.camera_left){
+        entities[camera].components[position_component].x -= 0.1;
+    }
+    if(controls.camera_right){
+        entities[camera].components[position_component].x += 0.1;
+    }
+
+    /** notes on model-view matrix
+     * seems like model-view matrix is the model's matrix with all the transformations applied 
+     * while the view matrix is the matrix returned by lookat()
+     * so model-view multiplies the view matrix onto the model matrix
+     * like how projection-view takes the projection matrix and multiplies the view matrix onto it
+     * using this information, we can just make it a view matrix instead to separate the matricies
+     * 
+     * camera position z is also inverted for some reason
+     */
+    //var model_view_matrix = lookAt(entities[camera].components[position_component].getVec3(), vec3(0, 0, 0), vec3(0, 1, 0));
+    var view_matrix = lookAt(entities[camera].components[position_component].getVec3(), vec3(0, 0, 0), vec3(0, 1, 0));
+    var projection_matrix = entities[camera].components[projection_component].getProjectionMatrix();
+
+    //var uModelViewMatrix_location = gl.getUniformLocation(program, "uModelViewMatrix");
+    var uViewMatrix_location = gl.getUniformLocation(program, "uViewMatrix");
+    var uProjectionMatrix_location = gl.getUniformLocation(program, "uProjectionMatrix");
+    //gl.uniformMatrix4fv(uModelViewMatrix_location, false, flatten(model_view_matrix));
+    gl.uniformMatrix4fv(uViewMatrix_location, false, flatten(view_matrix));
+    gl.uniformMatrix4fv(uProjectionMatrix_location, false, flatten(projection_matrix));
 }
 
 /** handles loading data to the gpu and drawing vertices to the canvas */
@@ -202,10 +290,10 @@ function render(){
     /** load gpu data for each active entity */
     for(var i = 0; i < entities_active_length; i++){
 
-        var entity_verticies = entities[i].findComponent("verticies");
-        if(entity_verticies != -1){
+        var verticies_component = entities[i].findComponent("verticies");
+        if(verticies_component != -1){
             /** the entity has a verticies component containing triangles we can draw in webgl */
-            var entity_verticies_array = entities[i].components[entity_verticies].verticies;
+            var entity_verticies_array = entities[i].components[verticies_component].verticies;
 
             /** load the vertices into the gpu */
             var vertex_buffer = gl.createBuffer();
