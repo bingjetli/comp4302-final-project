@@ -34,7 +34,7 @@ var entities_to_delete = [];
 var entities_active_length;
 
 /** handles webgl setup and other processes at initialization time */
-function initialize(){
+window.onload = function initialize(){
     /* initialize webgl rendering context */
     canvas = document.getElementById("gl_canvas");
     gl = canvas.getContext('webgl2');
@@ -51,12 +51,24 @@ function initialize(){
     program = initShaders(gl, "vertex_shader", "fragment_shader");
     gl.useProgram(program);
 
+    /** setup initial game state data*/
+    /** testing the Entity-Component-System */
+    var entity1 = createEntity("entity1");
+    var entity2 = createEntity("entity2");
+    var entity3 = createEntity("entity3");
+    var cube_entity = createEntity("cube");
+
+    entities[entity1].addComponent(testComponent("component1-1"));
+    entities[entity2].addComponent(testComponent("component1-2"));
+    entities[entity3].addComponent(testComponent("component1-3"));
+    entities[cube_entity].addComponent(verticiesComponent(generateCubeVerticies()));
+
     /* enter main update loop */
     update();
 }
 
 /** handles keydown events for input */
-function onKeyDown(evt){
+window.onkeydown = function onKeyDown(evt){
     var key = String.fromCharCode(evt.keyCode);
     switch(key){
         case 'F':
@@ -72,11 +84,21 @@ function onKeyDown(evt){
 }
 
 /** handles keyup events for input */
-function onKeyUp(evt){
+window.onkeyup = function onKeyUp(evt){
     var key = String.fromCharCode(evt.keyCode);
     switch(key){
         case 'F':
             console.log("not flapping wings anymore!");
+            break;
+
+        case 'T':
+            deleteEntity(0);
+            break;
+        case 'P':
+            console.log(entities);
+            break;
+        case 'Y':
+            entities[0].deleteComponent(0);
             break;
         default:
             console.log("key is up: " + key);
@@ -96,6 +118,20 @@ function updateEntities(){
 
     /** update the active entity length */
     entities_active_length = entities.length;
+
+    /** synchronize component data for the active entities*/
+    for(var i = 0; i < entities_active_length; i++){
+        /**remove all components marked for deletion for each active entity*/
+        for(var j = 0; j < entities[i].components_to_delete.length; j++){
+            entities[i].components.splice(entities[i].components_to_delete[j], 1);
+        }
+
+        /** clear the component deletion queue for each active entity */
+        entities[i].components_to_delete.splice(0, entities[i].components_to_delete.length);
+
+        /** update the active component length for each active entity */
+        entities[i].components_active_length = entities[i].components.length;
+    }
 }
 
 /** handles entity movement and positions as a result of movement */
@@ -159,6 +195,31 @@ function render(){
      *      draw the vertices arrays
      *          gl.drawArrays();
      */
+
+    /** clear gl buffers */
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    /** load gpu data for each active entity */
+    for(var i = 0; i < entities_active_length; i++){
+
+        var entity_verticies = entities[i].findComponent("verticies");
+        if(entity_verticies != -1){
+            /** the entity has a verticies component containing triangles we can draw in webgl */
+            var entity_verticies_array = entities[i].components[entity_verticies].verticies;
+
+            /** load the vertices into the gpu */
+            var vertex_buffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, vertex_buffer);
+            gl.bufferData(gl.ARRAY_BUFFER, flatten(entity_verticies_array), gl.STATIC_DRAW);
+
+            var aPosition_location = gl.getAttribLocation(program, "aPosition");
+            gl.vertexAttribPointer(aPosition_location, 4, gl.FLOAT, false, 0, 0);
+            gl.enableVertexAttribArray(aPosition_location);
+
+            /** draw the verticies array */
+            gl.drawArrays(gl.TRIANGLES, 0, entity_verticies_array.length);
+        }
+    }
 }
 
 /** handles the main update loop */
@@ -187,10 +248,6 @@ function update(){
 
     requestAnimationFrame(update);
 }
-
-window.onload = initialize();
-window.onkeydown = onKeyDown(e);
-window.onkeyup = onKeyUp(e);
 
 /** CONCEPT: 
  * entities are basically containers for "components"
@@ -227,6 +284,8 @@ window.onkeyup = onKeyUp(e);
  *          this results in queued entities to be deleted and added entities to be active
  *      it also clears the entities_to_delete array after removing the entities
  *  we call this function before doing anything during the update frame to make sure the entities data is synchronized for the current update frame
+ *  this function also does the same for components of each entity to synchronize component data
+ * 
 */
 
 /** creates and returns a new entity 
@@ -238,19 +297,35 @@ function createEntity(t){
     var output_entity = {
         tag:t,
         components:[],
-        /** findComponent(string comp)
+        components_active_length:0,
+        components_to_delete:[],
+        /** findComponent(string ctag)
          * loops through the entity's component array to find a component with a tag matching the specified tag
          * returns the index of the component if found, -1 if not found 
          * 
          * why return the index?, javascript data is pass-by-value, returning the component gives a copy of the component, not a reference to it
          */
-        findComponent:function(comp){
+        findComponent:function(ctag){
             for(var i = 0; i < this.components.length; i++){
-                if(this.components[i].tag == comp){
+                if(this.components[i].tag == ctag){
                     return i;
                 }
             }
             return -1;
+        },
+        /** addComponent(object component) 
+         * this function takes a component object and adds it to this entity's component list
+         * this component will not be active until the next update frame
+         * 
+        */
+        addComponent:function(c){
+            this.components.push(c);
+        },
+        /** deleteComponent(int component_reference) 
+         * marks the component referenced to be deleted on the next update frame
+        */
+        deleteComponent:function(cref){
+            this.components_to_delete.push(cref);
         }
     };
 
@@ -267,9 +342,39 @@ function deleteEntity(e){
     entities_to_delete.push(e);
 }
 
-/** TODO:
- * - create/add/remove components
- * - design the rest of the rendering pipeline
- * - design the rest of the ECS (Entity-Component-Systems) engine
- * - implement designs
- */
+function generateCubeVerticies(){
+    var vertex_list = [
+        vec4(-0.5, -0.5, 0.5, 1.0), /**bottom-left-back */
+        vec4(-0.5, 0.5, 0.5, 1.0), /**top-left-back */
+        vec4(0.5, 0.5, 0.5, 1.0), /**top-right-back */
+        vec4(0.5, -0.5, 0.5, 1.0), /**bottom-right-back */
+        vec4(-0.5, -0.5, -0.5, 1.0), /**bottom-left-front */
+        vec4(-0.5, 0.5, -0.5, 1.0), /**top-left-front */
+        vec4(0.5, 0.5, -0.5, 1.0), /**top-right-front */
+        vec4(0.5, -0.5, -0.5, 1.0) /**bottom-right-front */
+    ];
+    var face_list = [
+        vec4(1, 0, 3, 2), /**back */
+        vec4(2, 3, 7, 6), /**right */
+        vec4(3, 0, 4, 7), /**bottom */
+        vec4(6, 5, 1, 2), /**top */
+        vec4(4, 5, 6, 7), /**front */
+        vec4(5, 4, 0, 1) /**left */
+    ];
+    var output_vertices = [];
+
+    /** generate triangles */
+    face_list.forEach(function(item, index){
+        /** abc */
+        output_vertices.push(vertex_list[item[0]]);
+        output_vertices.push(vertex_list[item[1]]);
+        output_vertices.push(vertex_list[item[2]]);
+
+        /** acd */
+        output_vertices.push(vertex_list[item[0]]);
+        output_vertices.push(vertex_list[item[2]]);
+        output_vertices.push(vertex_list[item[3]]);
+    });
+
+    return output_vertices;
+}
