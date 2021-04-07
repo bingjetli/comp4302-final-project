@@ -31,6 +31,48 @@ function positionComponent(xparam, yparam, zparam, wparam){
     return output_component;
 }
 
+/** scaleComponent(x, y, z, w)
+ * creates and returns a scale component object
+ */
+function scaleComponent(xparam, yparam, zparam, wparam){
+    var output_component = {
+        tag:"scale",
+        x:xparam,
+        y:yparam,
+        z:zparam,
+        w:wparam,
+        getVec4:function(){
+            return vec4(this.x, this.y, this.z, this.w);
+        },
+        getVec3:function(){
+            return vec3(this.x, this.y, this.z);
+        }
+    };
+
+    return output_component;
+}
+
+/** rotationComponent(x, y, z, w)
+ * creates and returns a rotation component object
+ */
+function rotationComponent(xparam, yparam, zparam, wparam){
+    var output_component = {
+        tag:"rotation",
+        x:xparam,
+        y:yparam,
+        z:zparam,
+        w:wparam,
+        getVec4:function(){
+            return vec4(this.x, this.y, this.z, this.w);
+        },
+        getVec3:function(){
+            return vec3(this.x, this.y, this.z);
+        }
+    };
+
+    return output_component;
+}
+
 /** ambientComponent(r, g, b, a) 
  * creates and returns an ambient component object
 */
@@ -140,6 +182,10 @@ function normalsComponent(n){
     return output_component;
 }
 
+/** textureComponent(source_string, texture_coordinates_array) 
+ * creates and returns a texture component object
+ * must call the loadTexture function after the image loads to be able to use the texture
+*/
 function textureComponent(s, t){
     var output_component = {
         tag:"texture",

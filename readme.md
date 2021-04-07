@@ -1,6 +1,6 @@
 > rendering pipeline is mostly done
 >
-> need to implement object transformations, but that should be very simple
+> ~~need to implement object transformations, but that should be very simple~~ transformations is done
 >
 > camera is done
 >

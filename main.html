@@ -30,15 +30,18 @@
             uniform vec4 uMaterialSpecular;
             uniform float uMaterialShininess;
 
+            uniform mat4 uTransformationMatrix;
+
             void main(){
                 //basic vertex shader
                 //TODO: apply object transformations on verticies
-                gl_Position = uProjectionMatrix * uViewMatrix * aPosition;
+                gl_Position = uProjectionMatrix * uViewMatrix * (uTransformationMatrix * aPosition);
 
                 //calculate lights
-                vec3 vertex_position = -(aPosition).xyz;
+                vec3 vertex_position = -(uTransformationMatrix * aPosition).xyz;
                 vec4 NN = vec4(aNormal, 0);
                 //TODO: apply object transformations on normals
+                NN = uTransformationMatrix * NN;
                 vec3 N = normalize((NN).xyz);
 
                 /** calculate global light*/

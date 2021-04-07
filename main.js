@@ -67,6 +67,8 @@ window.onload = function initialize(){
     /** create player (test) */
     var player = createEntity("player");
     entities[player].addComponent(positionComponent(0, 0, 0, 1));
+    entities[player].addComponent(scaleComponent(1, 1, 1, 1));
+    entities[player].addComponent(rotationComponent(0, 0, 0, 1));
     entities[player].addComponent(verticiesComponent(generateCubeVerticies()));
     entities[player].addComponent(normalsComponent(generateCubeNormals()));
     entities[player].addComponent(ambientComponent(1, 1, 1, 1));
@@ -88,7 +90,7 @@ window.onload = function initialize(){
     entities[global_light].addComponent(specularComponent(1, 1, 1, 1, 100));
 
     var player_light = createEntity("player_light");
-    entities[player_light].addComponent(positionComponent(0, 1, 1, 0));
+    entities[player_light].addComponent(positionComponent(0, 0, 0, 0));
     entities[player_light].addComponent(ambientComponent(0.2, 0.2, 0.2, 1));
     entities[player_light].addComponent(diffuseComponent(1, 1, 1, 1));
     entities[player_light].addComponent(specularComponent(1, 1, 1, 1, 100));
@@ -364,15 +366,12 @@ function updateLights(){
 
 /** handles loading data to the gpu and drawing vertices to the canvas */
 function render(){
-    /** TODO:
-     * on every update frame,
+    /** on every update frame,
      *  render all renderable entities
      *  for each renderable entity,
      *      load data into gpu
      *          set the current vertex array buffer
      *          set the current transformation matrix
-     *          set the current modelview matrix
-     *          set the current projection matrix
      *          ...
      *          set any other possible data to be sent to the shaders
      *      draw the vertices arrays
@@ -399,6 +398,48 @@ function render(){
             var aPosition_location = gl.getAttribLocation(program, "aPosition");
             gl.vertexAttribPointer(aPosition_location, 4, gl.FLOAT, false, 0, 0);
             gl.enableVertexAttribArray(aPosition_location);
+
+            /** load object transformations into the gpu */
+            var current_transformation_matrix = mat4();
+            var scale_component = entities[i].findComponent("scale");
+            if(scale_component != -1){
+                /** there is a scale component to apply scaling */
+
+                var entity_scale = entities[i].components[scale_component];
+                current_transformation_matrix = mult(current_transformation_matrix, scale(entity_scale.x, entity_scale.y, entity_scale.z));
+            }
+            var rotation_component = entities[i].findComponent("rotation");
+            if(rotation_component != -1){
+                /** there is a rotation component to apply rotation */
+
+                var entity_rotation = entities[i].components[rotation_component];
+                if(entity_rotation.x != 0){
+                    /** apply rotation on the x axis */
+
+                    current_transformation_matrix = mult(current_transformation_matrix, rotateX(entity_rotation.x));
+                }
+                if(entity_rotation.y != 0){
+                    /** apply rotation on the x axis */
+
+                    current_transformation_matrix = mult(current_transformation_matrix, rotateY(entity_rotation.y));
+                }
+                if(entity_rotation.z != 0){
+                    /** apply rotation on the x axis */
+
+                    current_transformation_matrix = mult(current_transformation_matrix, rotateZ(entity_rotation.z));
+                }
+            }
+            var position_component = entities[i].findComponent("position");
+            if(position_component != -1){
+                /** there is a position component to apply translation */
+
+                var entity_position = entities[i].components[position_component];
+                current_transformation_matrix = mult(current_transformation_matrix, translate(entity_position.x, entity_position.y, entity_position.z));
+            }
+
+            var uTransformationMatrix_location = gl.getUniformLocation(program, "uTransformationMatrix");
+            gl.uniformMatrix4fv(uTransformationMatrix_location, false, flatten(current_transformation_matrix));
+
 
             /** load the vertex normals into the gpu 
              * because if entity has verticies, it might have normals
