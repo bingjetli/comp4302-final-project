@@ -7,15 +7,76 @@
 
             in vec4 aPosition;
             in vec4 aColor;
+            in vec3 aNormal;
+            in vec2 aTexCoord;
             out vec4 vColor;
+            out vec2 vTexCoord;
 
             uniform mat4 uViewMatrix;
             uniform mat4 uProjectionMatrix;
 
+            uniform vec4 uPlayerLightPosition;
+            uniform vec4 uPlayerLightAmbient;
+            uniform vec4 uPlayerLightDiffuse;
+            uniform vec4 uPlayerLightSpecular;
+
+            uniform vec4 uGlobalLightPosition;
+            uniform vec4 uGlobalLightAmbient;
+            uniform vec4 uGlobalLightDiffuse;
+            uniform vec4 uGlobalLightSpecular;
+
+            uniform vec4 uMaterialAmbient;
+            uniform vec4 uMaterialDiffuse;
+            uniform vec4 uMaterialSpecular;
+            uniform float uMaterialShininess;
+
             void main(){
                 //basic vertex shader
-                vColor = vec4(1.0, 1.0, 0.0, 0.5);
+                //TODO: apply object transformations on verticies
                 gl_Position = uProjectionMatrix * uViewMatrix * aPosition;
+
+                //calculate lights
+                vec3 vertex_position = -(aPosition).xyz;
+                vec4 NN = vec4(aNormal, 0);
+                //TODO: apply object transformations on normals
+                vec3 N = normalize((NN).xyz);
+
+                /** calculate global light*/
+                vec3 global_light_position = -uGlobalLightPosition.xyz;
+                vec3 global_L = normalize(global_light_position - vertex_position);
+                vec3 global_E = normalize(-vertex_position);
+                vec3 global_H = normalize(global_L + global_E);
+                vec4 global_ambient = uMaterialAmbient * uGlobalLightAmbient;
+                float global_Kd = max(dot(global_L, N), 0.0);
+                vec4 global_diffuse = global_Kd * (uMaterialDiffuse * uGlobalLightDiffuse);
+                float global_Ks = pow(max(dot(N, global_H), 0.0), uMaterialShininess);
+                vec4 global_specular = global_Ks * (uMaterialSpecular * uGlobalLightSpecular);
+                if(dot(global_L, N) < 0.0){
+                    global_specular = vec4(0.0, 0.0, 0.0, 1.0);
+                }
+                vec3 global_lighting = global_ambient.xyz + global_diffuse.xyz + global_specular.xyz;
+
+                /** calculate player light*/
+                vec3 player_light_position = -uPlayerLightPosition.xyz;
+                vec3 player_L = normalize(player_light_position - vertex_position);
+                vec3 player_E = normalize(-vertex_position);
+                vec3 player_H = normalize(player_L + player_E);
+                vec4 player_ambient = uMaterialAmbient * uPlayerLightAmbient;
+                float player_Kd = max(dot(player_L, N), 0.0);
+                vec4 player_diffuse = player_Kd * (uMaterialDiffuse * uPlayerLightDiffuse);
+                float player_Ks = pow(max(dot(N, player_H), 0.0), uMaterialShininess);
+                vec4 player_specular = player_Ks * (uMaterialSpecular * uPlayerLightSpecular);
+                if(dot(player_L, N) < 0.0){
+                    player_specular = vec4(0.0, 0.0, 0.0, 1.0);
+                }
+                vec3 player_lighting = player_ambient.xyz + player_diffuse.xyz + player_specular.xyz;
+
+                vec3 total_lighting = (0.5 * player_lighting) + (0.5 * global_lighting);
+
+                vColor = vec4(total_lighting, 1.0);
+
+                /** passthrough texture coordinates */
+                vTexCoord = aTexCoord;
             }
         </script>
         <script id="fragment_shader" type="x-shader/x-fragment">
@@ -24,11 +85,16 @@
             precision mediump float;
 
             in vec4 vColor;
+            in vec2 vTexCoord;
             out vec4 fColor;
+
+            uniform sampler2D uTextureMap;
 
             void main(){
                 //basic fragment shader
-                fColor = vColor;
+                fColor = vColor * texture(uTextureMap, vTexCoord);
+                //fColor = texture(uTextureMap, vTexCoord);
+                //fColor = vColor;
             }
         </script>
         <script type="text/javascript" src="initShaders.js"></script>

@@ -96,7 +96,7 @@ function specularComponent(rparam, gparam, bparam, aparam, sparam){
 }
 
 /** verticiesComponent(verticies_array) 
- * creates and returns a specular component object
+ * creates and returns a verticies component object
 */
 function verticiesComponent(v){
     var output_component = {
@@ -124,6 +124,49 @@ function projectionComponent(fo, a, n, fa){
             return perspective(this.fov, this.aspect, this.near, this.far);
         }
     };
+
+    return output_component;
+}
+
+/** normalsComponent(normals_array)
+ * creates and returns a normals component object
+ */
+function normalsComponent(n){
+    var output_component = {
+        tag:"normals",
+        normals:n
+    };
+
+    return output_component;
+}
+
+function textureComponent(s, t){
+    var output_component = {
+        tag:"texture",
+        source:s,
+        image:null,
+        loaded:false,
+        texture:null,
+        texture_coordinates:t,
+        loadTexture:function(){
+            this.texture = gl.createTexture();
+
+            gl.bindTexture(gl.TEXTURE_2D, this.texture);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, this.image);
+            gl.generateMipmap(gl.TEXTURE_2D);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+            var uTexMap_location = gl.getUniformLocation(program, "uTexMap");
+            gl.uniform1i(uTexMap_location, 0);
+
+            this.loaded = true;
+        }
+    };
+
+    output_component.image = new Image();
+    output_component.image.src = s;
+    console.log(output_component);
 
     return output_component;
 }
