@@ -106,9 +106,47 @@
         <script type="text/javascript" src="main.js"></script>
     </head>
     <body>
+		  
         <canvas id="gl_canvas" width="512" height="512">
             HTML5 canvas not supported
-        </canvas>
-        <canvas id="2d_canvas" width="512" height="512" style="position:absolute; left:0px; top:0px; z-index:10;">
+        </canvas><br><br>
+		<button id="again" style="display: none;" onClick="MyCustomFunction()" >Play again</button>
+		 
+		<h2>Playing instruction </h2> 
+		<ul>
+			<li>Prese 'P' to start the game</li>
+			<li>Use 'Space' to navigate the bird(cube) </li>
+			<li>Click Play again when the game is over </li>
+			<li>Use A,S,D,W,Q,E key from the keybord to change the camera</li>
+		</ul>
+        <canvas id="2d_canvas" width="512" height="512" style="position:absolute; left:0px; top:0px; z-index:10;"> 
     </body>
+	
+	
+	
+	<style>
+	#again {
+  background-color: #f44336;
+  border: none;
+  color: white;
+  padding: 15px 32px;
+  text-align: center;
+  text-decoration: none;
+  display:  block;
+  font-size: 16px;
+} 
+	</style>
+	
+	<script>
+        function MyCustomFunction(){
+			
+            var btn = document.getElementById("again");
+			btn.innerHTML = 'Please Wait...';
+			 
+			setTimeout(function(){
+				window.location.reload();
+			}, 200);
+			
+        }
+    </script>
 </html>

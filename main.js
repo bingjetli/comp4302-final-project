@@ -74,8 +74,12 @@ var controls = {
 
 var score;
 
+
+ 
 /** handles webgl setup and other processes at initialization time */
 window.onload = function initialize(){
+
+
     /* initialize webgl rendering context */
     canvas = document.getElementById("gl_canvas");
     gl = canvas.getContext('webgl2');
@@ -840,6 +844,7 @@ function render(){
     text_canvas.fillText(score, canvas.width/2, 100);
     if(controls.gameover){
         text_canvas.fillText("GAME OVER", canvas.width/2, canvas.height/2);
+		document.getElementById("again").style.display = "inline";
     }
     if(controls.paused){
         text_canvas.fillText("PAUSED", canvas.width/2, 200);
