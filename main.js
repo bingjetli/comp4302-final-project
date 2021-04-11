@@ -44,7 +44,10 @@ const PLAYER_WING_TEXTURE = "./textures/player_wing.png";
 /** global variables */
 var gl;
 var canvas;
-var text_canvas;
+var ctx2;
+var score_hud;
+var state_hud;
+var alt_text_hud;
 var program;
 
 var entities = [];
@@ -62,14 +65,22 @@ var controls = {
     camera_right:false,
     camera_up:false,
     camera_down:false,
-    paused:true,
+    paused:false,
+    gamestart:true,
     gameover:false,
     player_jump:false,
     player_finish_jump:true,
     player_up:false,
     player_down:false,
     player_left:false,
-    player_right:false
+    player_right:false,
+    light_manual:false,
+    light_up:false,
+    light_down:false,
+    light_left:false,
+    light_right:false,
+    light_on:true,
+    light_strobe:false,
 };
 
 var score;
@@ -83,18 +94,23 @@ window.onload = function initialize(){
         alert("WebGL 2.0 is not available");
     }
 
-    /** initialize text canvas */
-    text_canvas = document.getElementById("2d_canvas").getContext("2d");
+    /** initialize hud */
+    score_hud = document.getElementById("score_hud");
+    state_hud = document.getElementById("state_hud");
+    alt_text_hud = document.getElementById("alt_text_hud");
 
-    //configure text canvas
-    text_canvas.font = "48px Arial";
-    text_canvas.strokeStyle = "#000000";
-    text_canvas.fillStyle = "#FFFFFF";
-    text_canvas.textAlign = "center";
+    /** initialize background canvas */
+    ctx2 = document.getElementById("bg_canvas").getContext("2d");
+    var background = new Image();
+    background.src = "./textures/background.png";
+    background.onload = function(){
+        ctx2.drawImage(background, 0, 0);
+    };
 
     /* configure webgl rendering context */
     gl.viewport(0, 0, canvas.width, canvas.height);
-    gl.clearColor(45/255, 7/255, 7/255, 1);
+    //gl.clearColor(45/255, 7/255, 7/255, 1);
+    gl.clearColor(0, 0, 0, 0);
     gl.enable(gl.DEPTH_TEST);
 
     /* load shaders and build webgl program */
@@ -142,6 +158,7 @@ window.onload = function initialize(){
     /** create camera */
     camera = createEntity("camera");
     entities[camera].addComponent(positionComponent(0, 0, 5, 1));
+    entities[camera].addComponent(rotationComponent(Math.PI/2, 0, 0, 1));
     entities[camera].addComponent(projectionComponent(90, (canvas.width/canvas.height), 0.1, MAX_VIEW_DISTANCE));
 
     /** create lights */
@@ -216,6 +233,7 @@ window.onload = function initialize(){
     }
 
     score = 0;
+    score_hud.innerText = score;
 
     /* enter main update loop */
     update();
@@ -256,18 +274,30 @@ window.onkeydown = function onKeyDown(evt){
         case '&':
             //up arrow
             controls.player_up = true;
+            if(controls.light_manual){
+                controls.light_up = true;
+            }
             break;
         case '(':
             //down arrow
             controls.player_down = true;
+            if(controls.light_manual){
+                controls.light_down = true;
+            }
             break;
         case '%':
             //left arrow
             controls.player_left = true;
+            if(controls.light_manual){
+                controls.light_left = true;
+            }
             break;
         case "'":
             //right arrow
             controls.player_right = true;
+            if(controls.light_manual){
+                controls.light_right = true;
+            }
             break;
         default:
             console.log("key is down: " + key);
@@ -307,23 +337,51 @@ window.onkeyup = function onKeyUp(evt){
             if(controls.player_finish_jump == false){
                 controls.player_finish_jump = true;
             }
+            if(controls.gamestart){
+                controls.gamestart = false;
+                //start the game if it isn't started
+            }
             break;
         case '&':
             //up arrow
             controls.player_up = false;
+            if(controls.light_manual){
+                controls.light_up = false;
+            }
             break;
         case '(':
             //down arrow
             controls.player_down = false;
+            if(controls.light_manual){
+                controls.light_down = false;
+            }
             break;
         case '%':
             //left arrow
             controls.player_left = false;
+            if(controls.light_manual){
+                controls.light_left = false;
+            }
             break;
         case "'":
             //right arrow
             controls.player_right = false;
+            if(controls.light_manual){
+                controls.light_right = false;
+            }
             break;
+        case "R":
+            location.reload();
+            break;
+        case "1":
+            //toggle manual light movement
+            controls.light_manual = !controls.light_manual;
+        case "2":
+            //toggle player light
+            controls.light_on = !controls.light_on;
+        case "3":
+            //toggle player light strobe
+            controls.light_strobe = !controls.light_strobe;
         default:
             console.log("key is up: " + key);
     }
@@ -423,6 +481,7 @@ function updateMovement(){
         if(pipe_column_counter == 0){
             if(entities[item].components[position_component].x < 0.01 && entities[item].components[position_component].x > -0.01){
                 score++;
+                score_hud.innerText = score;
             }
         }
 
@@ -654,26 +713,32 @@ function updateCamera(){
     /** setup camera and projection */
     var projection_component = entities[camera].findComponent("projection");
     var position_component = entities[camera].findComponent("position");
+    var rotation_component = entities[camera].findComponent("rotation");
 
     /** update camera position */
     if(controls.camera_forward){
-        entities[camera].components[position_component].z -= 0.1;
+        entities[camera].components[projection_component].radius -= 0.1;
     }
     if(controls.camera_backward){
-        entities[camera].components[position_component].z += 0.1;
+        entities[camera].components[projection_component].radius += 0.1;
     }
     if(controls.camera_up){
-        entities[camera].components[position_component].y += 0.1;
+        entities[camera].components[rotation_component].y += 0.1;
     }
     if(controls.camera_down){
-        entities[camera].components[position_component].y -= 0.1;
+        entities[camera].components[rotation_component].y -= 0.1;
     }
     if(controls.camera_left){
-        entities[camera].components[position_component].x -= 0.1;
+        entities[camera].components[rotation_component].x += 0.1;
     }
     if(controls.camera_right){
-        entities[camera].components[position_component].x += 0.1;
+        entities[camera].components[rotation_component].x -= 0.1;
     }
+    
+    entities[camera].components[position_component].x = Math.cos(entities[camera].components[rotation_component].x) * entities[camera].components[projection_component].radius;
+    entities[camera].components[position_component].z = Math.sin(entities[camera].components[rotation_component].x) * entities[camera].components[projection_component].radius;
+    entities[camera].components[position_component].y = Math.sin(entities[camera].components[rotation_component].y) * entities[camera].components[projection_component].radius;
+
 
     /** notes on model-view matrix
      * seems like model-view matrix is the model's matrix with all the transformations applied 
@@ -709,12 +774,52 @@ function updateLights(){
     var global_light_specular_component = entities[global_light].findComponent("specular");
 
     //update player_light position before sending it to the gpu
-    var player_position_component = entities[player].findComponent("position");
-    var player_scale_component = entities[player].findComponent("scale");
+    //check if light is attached to player or manually controlled
+    if(controls.light_manual){
+        //manual light mode
 
-    entities[player_light].components[player_light_position_component].x = entities[player].components[player_position_component].x * entities[player].components[player_scale_component].x;
-    entities[player_light].components[player_light_position_component].y = entities[player].components[player_position_component].y * entities[player].components[player_scale_component].y;
-    entities[player_light].components[player_light_position_component].z = entities[player].components[player_position_component].z * entities[player].components[player_scale_component].z;
+        if(controls.light_up){
+            entities[player_light].components[player_light_position_component].y += 0.1;
+        }
+        if(controls.light_down){
+            entities[player_light].components[player_light_position_component].y -= 0.1;
+        }
+        if(controls.light_left){
+            entities[player_light].components[player_light_position_component].x -= 0.1;
+        }
+        if(controls.light_right){
+            entities[player_light].components[player_light_position_component].x += 0.1;
+        }
+    }
+    else{
+        //attached to player
+
+        var player_position_component = entities[player].findComponent("position");
+        var player_scale_component = entities[player].findComponent("scale");
+
+        entities[player_light].components[player_light_position_component].x = entities[player].components[player_position_component].x * entities[player].components[player_scale_component].x;
+        entities[player_light].components[player_light_position_component].y = entities[player].components[player_position_component].y * entities[player].components[player_scale_component].y;
+        entities[player_light].components[player_light_position_component].z = entities[player].components[player_position_component].z * entities[player].components[player_scale_component].z;
+    }
+    
+    //update light colors
+    if(controls.light_strobe){
+        //strobe mode
+
+        entities[player_light].components[player_light_diffuse_component].r = Math.random();
+        entities[player_light].components[player_light_diffuse_component].g = Math.random();
+        entities[player_light].components[player_light_diffuse_component].b = Math.random();
+    }
+    else{
+        //normal lighting
+
+        entities[player_light].components[player_light_diffuse_component].r = 1;
+        entities[player_light].components[player_light_diffuse_component].g = 1;
+        entities[player_light].components[player_light_diffuse_component].b = 1;
+    }
+
+    var uLightOn_location = gl.getUniformLocation(program, "uPlayerLightOn");
+    gl.uniform1f(uLightOn_location, (controls.light_on)? 1.0 : 0.0);
     
     var uLightPosition_location = gl.getUniformLocation(program, "uPlayerLightPosition");
     gl.uniform4fv(uLightPosition_location, entities[player_light].components[player_light_position_component].getVec4());
@@ -834,15 +939,24 @@ function render(){
 
     /** clear gl buffers */
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    text_canvas.clearRect(0, 0, canvas.width, canvas.height);
 
-    /** draw score text */
-    text_canvas.fillText(score, canvas.width/2, 100);
-    if(controls.gameover){
-        text_canvas.fillText("GAME OVER", canvas.width/2, canvas.height/2);
+
+    /** draw hud */
+    if(controls.gamestart){
+        state_hud.innerText = "GAME START";
+        alt_text_hud.innerText = "PRESS SPACEBAR TO PLAY";
     }
-    if(controls.paused){
-        text_canvas.fillText("PAUSED", canvas.width/2, 200);
+    else if(controls.gameover){
+        state_hud.innerText = "GAME OVER";
+        alt_text_hud.innerText = "PRESS R TO PLAY AGAIN";
+    }
+    else if(controls.paused){
+        state_hud.innerText = "PAUSED";
+        alt_text_hud.innerText = "PRESS P TO UNPAUSE";
+    }
+    else{
+        state_hud.innerText = "";
+        alt_text_hud.innerText = "";
     }
 
     /** load gpu data for each active entity */
@@ -986,7 +1100,7 @@ function update(){
      */
     updateEntities();
 
-    if(!controls.paused && !controls.gameover){
+    if(!controls.paused && !controls.gameover && !controls.gamestart){
         if(!DEBUG_COLLISION){
             updateMovement();
             updateGravity();

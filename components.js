@@ -174,6 +174,7 @@ function projectionComponent(fo, a, n, fa){
         aspect:a,
         near:n,
         far:fa,
+        radius:5,
         getProjectionMatrix:function(){
             return perspective(this.fov, this.aspect, this.near, this.far);
         }
