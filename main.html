@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>COMP 4302 - Final Project</title>
+        <script id="vertex_shader" type="x-shader/x-vertex">
+            #version 300 es
+
+            in vec4 aPosition;
+            in vec4 aColor;
+            in vec3 aNormal;
+            in vec2 aTexCoord;
+            out vec4 vColor;
+            out vec2 vTexCoord;
+
+            uniform mat4 uViewMatrix;
+            uniform mat4 uProjectionMatrix;
+
+            uniform float uPlayerLightOn;
+            uniform vec4 uPlayerLightPosition;
+            uniform vec4 uPlayerLightAmbient;
+            uniform vec4 uPlayerLightDiffuse;
+            uniform vec4 uPlayerLightSpecular;
+
+            uniform vec4 uGlobalLightPosition;
+            uniform vec4 uGlobalLightAmbient;
+            uniform vec4 uGlobalLightDiffuse;
+            uniform vec4 uGlobalLightSpecular;
+
+            uniform vec4 uMaterialAmbient;
+            uniform vec4 uMaterialDiffuse;
+            uniform vec4 uMaterialSpecular;
+            uniform float uMaterialShininess;
+
+            uniform mat4 uTransformationMatrix;
+
+            void main(){
+                //basic vertex shader
+                //TODO: apply object transformations on verticies
+                gl_Position = uProjectionMatrix * uViewMatrix * (uTransformationMatrix * aPosition);
+
+                //calculate lights
+                vec3 vertex_position = -(uTransformationMatrix * aPosition).xyz;
+                vec4 NN = vec4(aNormal, 0);
+                //TODO: apply object transformations on normals
+                NN = uTransformationMatrix * NN;
+                vec3 N = normalize((NN).xyz);
+
+                /** calculate global light*/
+                vec3 global_light_position = -uGlobalLightPosition.xyz;
+                vec3 global_L = normalize(global_light_position - vertex_position);
+                vec3 global_E = normalize(-vertex_position);
+                vec3 global_H = normalize(global_L + global_E);
+                vec4 global_ambient = uMaterialAmbient * uGlobalLightAmbient;
+                float global_Kd = max(dot(global_L, N), 0.0);
+                vec4 global_diffuse = global_Kd * (uMaterialDiffuse * uGlobalLightDiffuse);
+                float global_Ks = pow(max(dot(N, global_H), 0.0), uMaterialShininess);
+                vec4 global_specular = global_Ks * (uMaterialSpecular * uGlobalLightSpecular);
+                if(dot(global_L, N) < 0.0){
+                    global_specular = vec4(0.0, 0.0, 0.0, 1.0);
+                }
+                vec3 global_lighting = global_ambient.xyz + global_diffuse.xyz + global_specular.xyz;
+
+                /** calculate player light*/
+                vec3 player_light_position = -uPlayerLightPosition.xyz;
+                vec3 player_L = normalize(player_light_position - vertex_position);
+                vec3 player_E = normalize(-vertex_position);
+                vec3 player_H = normalize(player_L + player_E);
+                vec4 player_ambient = uMaterialAmbient * uPlayerLightAmbient;
+                float player_Kd = max(dot(player_L, N), 0.0);
+                vec4 player_diffuse = player_Kd * (uMaterialDiffuse * uPlayerLightDiffuse);
+                float player_Ks = pow(max(dot(N, player_H), 0.0), uMaterialShininess);
+                vec4 player_specular = player_Ks * (uMaterialSpecular * uPlayerLightSpecular);
+                if(dot(player_L, N) < 0.0){
+                    player_specular = vec4(0.0, 0.0, 0.0, 1.0);
+                }
+                vec3 player_lighting = player_ambient.xyz + player_diffuse.xyz + player_specular.xyz;
+
+                vec3 total_lighting;
+                if(uPlayerLightOn == 1.0){
+                    total_lighting = (0.5 * player_lighting) + (0.5 * global_lighting);
+                }
+                else {
+                    total_lighting = global_lighting;
+                }
+
+                vColor = vec4(total_lighting, 1.0);
+
+                /** passthrough texture coordinates */
+                vTexCoord = aTexCoord;
+            }
+        </script>
+        <script id="fragment_shader" type="x-shader/x-fragment">
+            #version 300 es
+
+            precision mediump float;
+
+            in vec4 vColor;
+            in vec2 vTexCoord;
+            out vec4 fColor;
+
+            uniform sampler2D uTextureMap;
+
+            void main(){
+                //basic fragment shader
+                fColor = vColor * texture(uTextureMap, vTexCoord);
+                //fColor = texture(uTextureMap, vTexCoord);
+                //fColor = vColor;
+            }
+        </script>
+        <script type="text/javascript" src="initShaders.js"></script>
+        <script type="text/javascript" src="MVnew.js"></script>
+        <script type="text/javascript" src="components.js"></script>
+        <script type="text/javascript" src="main.js"></script>
+    </head>
+    <body style="background-color: rgb(45, 7, 7);">
+        <div>
+            <canvas id="gl_canvas" width="512" height="512" style="position:absolute; left:0px; top:0px; z-index:2;">
+                HTML5 canvas not supported
+            </canvas>
+            <canvas id="bg_canvas" width="512" height="512" style="position:absolute; left:0px; top:0px; z-index:1;">
+        </div>
+        <div style="position:absolute; left:10px; top:520px; font-size:14px; color:white;">
+            <h3>COMP 4302 Final Project - Flappy Bird Clone</h3>
+            <br>
+            <b>Submitted by: Bailey Liang & Md Kabir Zubaer</b>
+            <br>
+            <h5>Description:</h5>
+            <br>
+            - A clone of the mobile game "Flappy Bird" using Minecraft Textures and Terraria Backgrounds implemented in Javascript, HTML and WebGL
+            <br>
+            <h5>Controls:</h5>
+            <br>
+            - 1 : Toggle PlayerLight Manual Control
+            <br>
+            - 2 : Toggle PlayerLight
+            <br>
+            - 3 : Toggle PlayerLight Color / Strobe Lighting
+            <br>
+            - Arrow Keys : Move Player Light in Manual Mode
+            <br>
+            - A : Camera Left
+            <br>
+            - D : Camera Right
+            <br>
+            - W : Camera Forward
+            <br>
+            - S : Camera Backward
+            <br>
+            - Q : Camera Up
+            <br>
+            - E : Camera Down
+            <br>
+            - P : Pause/Unpause
+            <br>
+            - SPACEBAR : Flap Wings
+            <br>
+            - R : Reset Game
+            <br>
+            <h5>This game was tested on a i3-9100F & AMD R9 290 on 8GB System RAM, for best results run this game on an equivalent rig or better.</h5>>
+        </div>
+        <div id="score_hud" style="position:absolute; left:256px; top:100px; z-index:4; font-size:48px; text-align:center; color:white; transform:translate(-50%, -50%);">
+        </div>
+        <div id="state_hud" style="position:absolute; left:256px; top:256px; z-index:4; font-size:48px; text-align:center; color:white; transform:translate(-50%, -50%);">
+        </div>
+        <div id="alt_text_hud" style="position:absolute; left:256px; top:300px; z-index:4; font-size:24px; text-align:center; color:white; transform:translate(-50%, -50%);">
+        </div>
+    </body>
+</html>
