@@ -25,16 +25,35 @@
 
 "use strict"
 
+/** game settings */
+const DEBUG_COLLISION = false;
+const MAX_GROUND_BLOCKS = 15;
+const MAX_PIPES = 3;
+const MAX_PIPE_COLUMN = 7;
+const PIPE_START_Y = -3;
+const MAX_VIEW_DISTANCE = 100;
+const PLAYER_MOVEMENT_SPEED = 0.05;
+const PLAYER_MAX_FALL_SPEED = -0.3;
+const PLAYER_MAX_JUMP_SPEED = 0.25;
+const GRAVITY = -0.025;
+const GROUND_BLOCK_TEXTURE = "./textures/ground.png";
+const PIPE_BLOCK_TEXTURE = "./textures/pipe.png";
+const PLAYER_BODY_TEXTURE = "./textures/player_body.png";
+const PLAYER_WING_TEXTURE = "./textures/player_wing.png";
+
 /** global variables */
 var gl;
 var canvas;
+var text_canvas;
 var program;
 
 var entities = [];
 var entities_to_delete = [];
 var entities_active_length;
+var entity_lookup_map = {};
 
 var camera;
+var player;
 
 var controls = {
     camera_forward:false,
@@ -42,8 +61,18 @@ var controls = {
     camera_left:false,
     camera_right:false,
     camera_up:false,
-    camera_down:false
+    camera_down:false,
+    paused:true,
+    gameover:false,
+    player_jump:false,
+    player_finish_jump:true,
+    player_up:false,
+    player_down:false,
+    player_left:false,
+    player_right:false
 };
+
+var score;
 
 /** handles webgl setup and other processes at initialization time */
 window.onload = function initialize(){
@@ -54,9 +83,18 @@ window.onload = function initialize(){
         alert("WebGL 2.0 is not available");
     }
 
+    /** initialize text canvas */
+    text_canvas = document.getElementById("2d_canvas").getContext("2d");
+
+    //configure text canvas
+    text_canvas.font = "48px Arial";
+    text_canvas.strokeStyle = "#000000";
+    text_canvas.fillStyle = "#FFFFFF";
+    text_canvas.textAlign = "center";
+
     /* configure webgl rendering context */
     gl.viewport(0, 0, canvas.width, canvas.height);
-    gl.clearColor(0, 0, 0, 1);
+    gl.clearColor(45/255, 7/255, 7/255, 1);
     gl.enable(gl.DEPTH_TEST);
 
     /* load shaders and build webgl program */
@@ -64,27 +102,51 @@ window.onload = function initialize(){
     gl.useProgram(program);
 
     /** setup initial game state data*/
-    /** create player (test) */
-    var player = createEntity("player");
+    /** create player */
+    var player_wing1 = createEntity("player_wing");
+    entities[player_wing1].addComponent(positionComponent(-0.25, 0, 0.5, 1));
+    entities[player_wing1].addComponent(scaleComponent(0.25, 0.125, 0.5, 1));
+    entities[player_wing1].addComponent(rotationComponent(0, 0, 0, 1));
+    entities[player_wing1].addComponent(verticiesComponent(generateCubeVerticies()));
+    entities[player_wing1].addComponent(normalsComponent(generateCubeNormals()));
+    entities[player_wing1].addComponent(ambientComponent(1, 1, 1, 1));
+    entities[player_wing1].addComponent(diffuseComponent(1, 1, 1, 1));
+    entities[player_wing1].addComponent(specularComponent(1, 1, 1, 1, 100));
+    entities[player_wing1].addComponent(textureComponent(PLAYER_WING_TEXTURE, generateCubeTextureCoordinates()));
+    var player_wing2 = createEntity("player_wing");
+    entities[player_wing2].addComponent(positionComponent(-0.25, 0, -0.5, 1));
+    entities[player_wing2].addComponent(scaleComponent(0.25, 0.125, 0.5, 1));
+    entities[player_wing2].addComponent(rotationComponent(0, 0, 0, 1));
+    entities[player_wing2].addComponent(verticiesComponent(generateCubeVerticies()));
+    entities[player_wing2].addComponent(normalsComponent(generateCubeNormals()));
+    entities[player_wing2].addComponent(ambientComponent(1, 1, 1, 1));
+    entities[player_wing2].addComponent(diffuseComponent(1, 1, 1, 1));
+    entities[player_wing2].addComponent(specularComponent(1, 1, 1, 1, 100));
+    entities[player_wing2].addComponent(textureComponent(PLAYER_WING_TEXTURE, generateCubeTextureCoordinates()));
+    player = createEntity("player");
     entities[player].addComponent(positionComponent(0, 0, 0, 1));
-    entities[player].addComponent(scaleComponent(1, 1, 1, 1));
+    entities[player].addComponent(scaleComponent(0.5, 0.5, 0.5, 1));
+    //entities[player].addComponent(scaleComponent(1, 1, 1, 1));
     entities[player].addComponent(rotationComponent(0, 0, 0, 1));
     entities[player].addComponent(verticiesComponent(generateCubeVerticies()));
     entities[player].addComponent(normalsComponent(generateCubeNormals()));
     entities[player].addComponent(ambientComponent(1, 1, 1, 1));
     entities[player].addComponent(diffuseComponent(1, 1, 1, 1));
     entities[player].addComponent(specularComponent(1, 1, 1, 1, 100));
-    var texture_component = entities[player].addComponent(textureComponent("tiger.png", generateCubeTextureCoordinates()));
-    entities[player].components[texture_component].image.onload = entities[player].components[texture_component].loadTexture();
+    entities[player].addComponent(textureComponent(PLAYER_BODY_TEXTURE, generateCubeTextureCoordinates()));
+    entities[player].addComponent(velocityComponent(0, PLAYER_MAX_FALL_SPEED, 0, 0));
+    var player_children_component = entities[player].addComponent(childrenComponent());
+    entities[player].components[player_children_component].addChild(player_wing1);
+    entities[player].components[player_children_component].addChild(player_wing2);
 
     /** create camera */
     camera = createEntity("camera");
-    entities[camera].addComponent(positionComponent(1, 1, 3, 1));
-    entities[camera].addComponent(projectionComponent(90, (canvas.width/canvas.height), 0.1, 100));
+    entities[camera].addComponent(positionComponent(0, 0, 5, 1));
+    entities[camera].addComponent(projectionComponent(90, (canvas.width/canvas.height), 0.1, MAX_VIEW_DISTANCE));
 
     /** create lights */
     var global_light = createEntity("global_light");
-    entities[global_light].addComponent(positionComponent(-1, 1, 0, 0));
+    entities[global_light].addComponent(positionComponent(-10, 10, 10, 0));
     entities[global_light].addComponent(ambientComponent(0.2, 0.2, 0.2, 1));
     entities[global_light].addComponent(diffuseComponent(1, 1, 1, 1));
     entities[global_light].addComponent(specularComponent(1, 1, 1, 1, 100));
@@ -94,6 +156,66 @@ window.onload = function initialize(){
     entities[player_light].addComponent(ambientComponent(0.2, 0.2, 0.2, 1));
     entities[player_light].addComponent(diffuseComponent(1, 1, 1, 1));
     entities[player_light].addComponent(specularComponent(1, 1, 1, 1, 100));
+
+    /** create level */
+    if(!DEBUG_COLLISION){
+        for(var i = 0; i < MAX_GROUND_BLOCKS; i++){
+            var ground_block = createEntity("ground_block");
+            entities[ground_block].addComponent(positionComponent(i - Math.floor((MAX_GROUND_BLOCKS/2)), -4, 0, 1));
+            entities[ground_block].addComponent(scaleComponent(1, 1, 1, 1));
+            entities[ground_block].addComponent(verticiesComponent(generateCubeVerticies()));
+            entities[ground_block].addComponent(normalsComponent(generateCubeNormals()));
+            entities[ground_block].addComponent(ambientComponent(1, 1, 1, 1));
+            entities[ground_block].addComponent(diffuseComponent(1, 1, 1, 1));
+            entities[ground_block].addComponent(specularComponent(1, 1, 1, 1, 100));
+            entities[ground_block].addComponent(textureComponent(GROUND_BLOCK_TEXTURE, generateCubeTextureCoordinates()));
+        }
+
+        for(var i = 0; i < MAX_PIPES; i++){
+            var gap_y = Math.floor((Math.random() * MAX_PIPE_COLUMN) % MAX_PIPE_COLUMN-3);
+
+            for(var j = 0; j < MAX_PIPE_COLUMN; j++){
+                var pipe_block = createEntity("pipe_block");
+                //entities[pipe_block].addComponent(positionComponent((i * 5) + 5, j - 3, 0, 1));
+
+                if(j+PIPE_START_Y >= gap_y){
+                    //pipe's blocks are higher than the gap_y
+
+                    //offset by gap amount
+                    //entities[pipe_block].components[position_component].y = (pipe_column_counter + PIPE_START_Y) + gap_height;
+                    entities[pipe_block].addComponent(positionComponent((i * 5) + 5, (j + PIPE_START_Y) + 2, 0, 1));
+                }
+                else {
+                    //this pipe block's y is not in a gap
+
+                    //set height as normal
+                    //entities[item].components[position_component].y = pipe_column_counter + PIPE_START_Y;
+                    entities[pipe_block].addComponent(positionComponent((i * 5) + 5, (j + PIPE_START_Y), 0, 1));
+                }
+                entities[pipe_block].addComponent(scaleComponent(1, 1, 1, 1));
+                entities[pipe_block].addComponent(verticiesComponent(generateCubeVerticies()));
+                entities[pipe_block].addComponent(normalsComponent(generateCubeNormals()));
+                entities[pipe_block].addComponent(ambientComponent(1, 1, 1, 1));
+                entities[pipe_block].addComponent(diffuseComponent(1, 1, 1, 1));
+                entities[pipe_block].addComponent(specularComponent(1, 1, 1, 1, 100));
+                entities[pipe_block].addComponent(textureComponent(PIPE_BLOCK_TEXTURE, generateCubeTextureCoordinates()));
+            }
+        }
+    }
+    else {
+        //debug level
+        var ground_block = createEntity("ground_block");
+        entities[ground_block].addComponent(positionComponent(2, 0, 0, 1));
+        entities[ground_block].addComponent(scaleComponent(1, 1, 1, 1));
+        entities[ground_block].addComponent(verticiesComponent(generateCubeVerticies()));
+        entities[ground_block].addComponent(normalsComponent(generateCubeNormals()));
+        entities[ground_block].addComponent(ambientComponent(1, 1, 1, 1));
+        entities[ground_block].addComponent(diffuseComponent(1, 1, 1, 1));
+        entities[ground_block].addComponent(specularComponent(1, 1, 1, 1, 100));
+        entities[ground_block].addComponent(textureComponent(GROUND_BLOCK_TEXTURE, generateCubeTextureCoordinates()));
+    }
+
+    score = 0;
 
     /* enter main update loop */
     update();
@@ -128,6 +250,25 @@ window.onkeydown = function onKeyDown(evt){
         case 'E':
             controls.camera_down = true;
             break;
+        case ' ':
+            controls.player_jump = true;
+            break;
+        case '&':
+            //up arrow
+            controls.player_up = true;
+            break;
+        case '(':
+            //down arrow
+            controls.player_down = true;
+            break;
+        case '%':
+            //left arrow
+            controls.player_left = true;
+            break;
+        case "'":
+            //right arrow
+            controls.player_right = true;
+            break;
         default:
             console.log("key is down: " + key);
     }
@@ -138,7 +279,7 @@ window.onkeyup = function onKeyUp(evt){
     var key = String.fromCharCode(evt.keyCode);
     switch(key){
         case 'F':
-            console.log("not flapping wings anymore!");
+            console.log(entities);
             break;
         case 'W':
             controls.camera_forward = false;
@@ -158,6 +299,31 @@ window.onkeyup = function onKeyUp(evt){
         case 'E':
             controls.camera_down = false;
             break;
+        case 'P':
+            controls.paused = !controls.paused;
+            break;
+        case ' ':
+            controls.player_jump = false;
+            if(controls.player_finish_jump == false){
+                controls.player_finish_jump = true;
+            }
+            break;
+        case '&':
+            //up arrow
+            controls.player_up = false;
+            break;
+        case '(':
+            //down arrow
+            controls.player_down = false;
+            break;
+        case '%':
+            //left arrow
+            controls.player_left = false;
+            break;
+        case "'":
+            //right arrow
+            controls.player_right = false;
+            break;
         default:
             console.log("key is up: " + key);
     }
@@ -168,7 +334,11 @@ function updateEntities(){
 
     /** remove all entities marked for deletion */
     for(var i = 0; i < entities_to_delete.length; i++){
-        entities.splice(entities_to_delete[i], 1);
+        var entity_reference = entities_to_delete[i];
+        var entity_tag = entities[entity_reference].tag;
+
+        entities.splice(entity_reference, 1);
+        entity_lookup_map[entity_tag].splice(entity_reference, 1);
     }
     
     /** clear the entity deletion queue */
@@ -181,7 +351,9 @@ function updateEntities(){
     for(var i = 0; i < entities_active_length; i++){
         /**remove all components marked for deletion for each active entity*/
         for(var j = 0; j < entities[i].components_to_delete.length; j++){
-            entities[i].components.splice(entities[i].components_to_delete[j], 1);
+
+            entities[i].components.splice(entities[i].component_lookup_map[entities[i].components_to_delete[j]], 1);
+            delete entities[i].component_lookup_map[entities[i].components_to_delete[j]];
         }
 
         /** clear the component deletion queue for each active entity */
@@ -192,32 +364,282 @@ function updateEntities(){
     }
 }
 
+/** handles entity movement and positions during debugging */
+function updateMovementDebug(){
+    var position_component = entities[player].findComponent("position");
+
+    if(controls.player_up){
+        entities[player].components[position_component].y += PLAYER_MOVEMENT_SPEED;
+    }
+    if(controls.player_down){
+        entities[player].components[position_component].y -= PLAYER_MOVEMENT_SPEED;
+    }
+    if(controls.player_left){
+        entities[player].components[position_component].x -= PLAYER_MOVEMENT_SPEED;
+    }
+    if(controls.player_right){
+        entities[player].components[position_component].x += PLAYER_MOVEMENT_SPEED;
+    }
+}
+
 /** handles entity movement and positions as a result of movement */
 function updateMovement(){
-    /** TODO:
-     * on every update frame,
-     *  check if player pressed the key to flap it's wings
-     *      translate player position up to simulate wing flap
-     *  handle other possible entity movement
+    var max_ground_blocks_clean_half = Math.floor(MAX_GROUND_BLOCKS/2);
+
+    var ground_blocks = getEntityCollection("ground_block");
+    ground_blocks.forEach(function(item, index){
+        var position_component = entities[item].findComponent("position");
+
+        if(entities[item].components[position_component].x < ((-1) * max_ground_blocks_clean_half - 1)){
+            //ground block went too far offscreen, move the block to the right side of the screen 
+
+            entities[item].components[position_component].x = max_ground_blocks_clean_half - 1;
+        }
+
+        entities[item].components[position_component].x -= PLAYER_MOVEMENT_SPEED;
+    });
+
+    var pipe_blocks = getEntityCollection("pipe_block");
+    /** pipe column counter
+     * we know that the first MAX_PIPE_COLUMN blocks are of the same column
+     * the pipes are also generated in order
+     * so we manipulate columns by counting the number of pipe blocks for each column 
+     * and resetting when one column is counted
      */
+    var pipe_column_counter = 0;
+    var gap_height = 2
+    var gap_y = Math.floor((Math.random() * MAX_PIPE_COLUMN) % MAX_PIPE_COLUMN-3);
+    pipe_blocks.forEach(function(item, index){
+        var position_component = entities[item].findComponent("position");
+
+        if(pipe_column_counter >= MAX_PIPE_COLUMN){
+            //one column is counted
+
+            //reset counter variable for next column
+            pipe_column_counter = 0;
+            gap_y = Math.floor((Math.random() * MAX_PIPE_COLUMN) % MAX_PIPE_COLUMN-3);
+        }
+
+        if(pipe_column_counter == 0){
+            if(entities[item].components[position_component].x < 0.01 && entities[item].components[position_component].x > -0.01){
+                score++;
+            }
+        }
+
+        if(entities[item].components[position_component].x < ((-1) * (MAX_GROUND_BLOCKS/2) - 1)){
+            //ground block went too far offscreen, move the block to the right side of the screen 
+
+            entities[item].components[position_component].x = (MAX_GROUND_BLOCKS/2) - 1;
+
+            //regenerate column
+
+            if(pipe_column_counter+PIPE_START_Y >= gap_y){
+                //pipe's blocks are higher than the gap_y
+
+                //offset by gap amount
+                entities[item].components[position_component].y = (pipe_column_counter + PIPE_START_Y) + gap_height;
+            }
+            else {
+                //this pipe block's y is not in a gap
+
+                //set height as normal
+                entities[item].components[position_component].y = pipe_column_counter + PIPE_START_Y;
+            }
+        }
+
+        entities[item].components[position_component].x -= PLAYER_MOVEMENT_SPEED;
+
+        pipe_column_counter++; //update when block is finished processing
+    });
+
 }
 
 /** handles simulation of gravity for the player entity */
 function updateGravity(){
-    /**TODO:
-     * on every update frame,
-     *  translate player position down to simulate gravity effect
-     */
+    var velocity_component = entities[player].findComponent("velocity");
+
+    // calculate player falling velocity
+    if(entities[player].components[velocity_component].y < PLAYER_MAX_FALL_SPEED){
+        entities[player].components[velocity_component].y = PLAYER_MAX_FALL_SPEED;
+    }
+    else {
+        //player has not reached terminal velocity
+
+        entities[player].components[velocity_component].y += GRAVITY;
+    }
+
+    // implement player jump
+    if(controls.player_jump){
+        //player pressed the jump button
+
+        if(controls.player_finish_jump){
+            //fresh new jump sequence, player is not currently already jumping or finished their last jump already
+
+            entities[player].components[velocity_component].y = PLAYER_MAX_JUMP_SPEED;
+            controls.player_finish_jump = false;
+        }
+        else {
+            //player is currently in the middle of jumping
+
+            if(entities[player].components[velocity_component].y == 0){
+                //player reached the height of their jump, i.e finished their jump
+
+                controls.player_finish_jump = true;
+            }
+        }
+    }
+
+    //simulate the effect of gravity on the player
+    var position_component = entities[player].findComponent("position");
+    var scale_component = entities[player].findComponent("scale");
+
+    entities[player].components[position_component].y += entities[player].components[velocity_component].y;
+
+    //that part of the program where elements are moving in hierarchial relationship with another.
+    //but if you ask me, the moving ground_block carrying the pipe_blocks already do that
+    //but I'm gonna script this in just in case
+    var children_component = entities[player].findComponent("children");
+    entities[player].components[children_component].children.forEach(function(item, index){
+        var child_position_component = entities[item].findComponent("position");
+        var child_scale_component = entities[item].findComponent("scale");
+
+        entities[item].components[child_position_component].y = (entities[player].components[position_component].y * entities[player].components[scale_component].y) + entities[item].components[child_position_component].y_initial;
+        entities[item].components[child_position_component].y /= entities[item].components[child_scale_component].y;
+    });
 }
 
 /** handles collision detection of entities */
 function updateCollision(){
-    /** TODO:
-     * on every update frame,
-     *  for each entity,
-     *      check if there are collisions occuring
-     *      update game data accordingly
+    /** CONCEPT: simple 2d collision detection
+     * collision occurs when there is an x_overlap and y_overlap
+     * check each collidable entity for an x_overlap and y_overlap
      */
+    var player_position_component = entities[player].findComponent("position");
+    var player_scale_component = entities[player].findComponent("scale");
+    var player_xscale = entities[player].components[player_scale_component].x;
+    var player_yscale = entities[player].components[player_scale_component].y;
+    var player_xposition = entities[player].components[player_position_component].x;
+    var player_yposition = entities[player].components[player_position_component].y;
+
+    /** scaling things down make them travel more distance to get to the same place
+     * for example if a block is scaled to 0.5, it takes 2x the translation to get to the same position on screen
+     * so we multiply the position by the scale factor to get the actual position
+     * i guess this makes sense?
+     */
+    player_xposition = player_xposition * player_xscale;
+    player_yposition = player_yposition * player_yscale;
+
+    var gameover_blocks = getEntityCollection("ground_block").concat(getEntityCollection("pipe_block"));
+    gameover_blocks.forEach(function(item, index){
+        //for each collidable entity
+
+        var x_overlap = false;
+        var y_overlap = false;
+
+        var entity_position_component = entities[item].findComponent("position");
+        var entity_scale_component = entities[item].findComponent("scale");
+        var entity_xscale = entities[item].components[entity_scale_component].x;
+        var entity_yscale = entities[item].components[entity_scale_component].y;
+        var entity_xposition = entities[item].components[entity_position_component].x;
+        var entity_yposition = entities[item].components[entity_position_component].y;
+        
+        //rescale positions
+        entity_xposition = entity_xposition * entity_xscale;
+        entity_yposition = entity_yposition * entity_yscale;
+
+        //check for x_overlap
+        var distance_0;
+        var distance;
+        //distance_0 = (entity_xscale/2 + player_xscale/2) * (entity_xscale/2 + player_xscale/2);
+        distance_0 = ((entity_xscale/2) + (player_xscale/2));
+        if(player_xposition > entity_xposition){
+            //player is to the right of entity, so we check for left sided collision
+
+            //check for left-sided collision
+            //distance = ((entity_xposition + entity_xscale/2) - (player_xposition - player_xscale/2)) * ((entity_xposition + entity_xscale/2) - (player_xposition - player_xscale/2));
+            //distance = Math.abs((player_xposition - (player_xscale/2)) - (entity_xposition + (entity_xscale/2)));
+            distance = Math.abs(Math.abs(player_xposition) - entity_xposition);
+            if(distance < distance_0){
+                //there is a left-sided collision on the x-axis
+
+                x_overlap = true;
+            }
+        }
+        else if(player_xposition < entity_xposition){
+            //player is to the left of entity, so we check for right sided collision
+
+            //check for right-sided collision
+            //distance = ((entity_xposition - entity_xscale/2) - (player_xposition + player_xscale/2)) * ((entity_xposition - entity_xscale/2) - (player_xposition + player_xscale/2));
+            //distance = Math.abs((entity_xposition - (entity_xscale/2)) - (player_xposition + (player_xscale/2)));
+            distance = Math.abs(entity_xposition - player_xposition);
+            if(distance < distance_0){
+                //there is a right-sided collision on the x-axis
+
+                x_overlap = true;
+            }
+        }
+        else {
+            //same x position as each other, likely a x overlap
+
+            x_overlap = true;
+        }
+        //check for y_overlap
+        //distance_0 = (entity_yscale/2 + player_yscale/2) * (entity_yscale/2 + player_yscale/2);
+        distance_0 = ((entity_yscale/2) + (player_yscale/2));
+        if(player_yposition > entity_yposition){
+            //player is above entity, so we check for bot side collision
+
+            //check for bot-sided collision
+            //distance = ((entity_yposition + entity_yscale/2) - (player_yposition - player_yscale/2)) * ((entity_yposition + entity_yscale/2) - (player_yposition - player_yscale/2));
+            //distance = Math.abs((player_yposition - (player_yscale/2)) - (entity_yposition + (entity_yscale/2)));
+            distance = Math.abs(Math.abs(player_yposition) - entity_yposition);
+            if(distance < distance_0){
+                //there is a bot-sided collision on the y-axis
+
+                y_overlap = true;
+            }
+        }
+        else if(player_yposition < entity_yposition){
+            //player is below entity, so we check for top side collision
+
+            //check for top-sided collision
+            //distance = ((entity_yposition - entity_yscale/2) - (player_yposition + player_yscale/2)) * ((entity_yposition - entity_yscale/2) - (player_yposition + player_yscale/2));
+            //distance = Math.abs((entity_yposition - (entity_yscale/2)) - (player_yposition + (player_yscale/2)));
+            distance = Math.abs(entity_yposition - player_yposition);
+            if(distance < distance_0){
+                //there is a top-sided collision on the y-axis
+
+                y_overlap = true;
+            }
+        }
+        else {
+            //same y position as each other, more than likely a y_overlap
+
+            y_overlap = true;
+        }
+
+        //check if there is a collision between these two entities
+        if((x_overlap == true) && (y_overlap == true)){
+            //collision detected!
+
+            //console.log("---");
+            //console.log("collision detected!: " + entity_xscale + ", " + entity_xposition + ", " + entity_yscale + ", " + entity_yposition + "; ");
+            //console.log("collision detected!: " + player_xscale + ", " + player_xposition + ", " + player_yscale + ", " + player_yposition + "; ");
+            //console.log("x_d0:" + ((entity_xscale/2) + (player_xscale/2)));
+            //console.log("left_d: " + Math.abs(Math.abs(player_xposition) - entity_xposition));
+            //console.log("right_d: " + Math.abs(Math.abs(entity_xposition) - player_xposition));
+            //console.log("y_d0:" + ((entity_yscale/2) + (player_yscale/2)));
+            //console.log("top_d: " + Math.abs(Math.abs(entity_yposition) - player_yposition));
+            //console.log("bot_d: " + Math.abs(Math.abs(player_yposition) - entity_yposition));
+            //console.log("---");
+
+            var entity_diffuse_component = entities[item].findComponent("diffuse");
+            entities[item].components[entity_diffuse_component].r = Math.random();
+            entities[item].components[entity_diffuse_component].g = Math.random();
+            entities[item].components[entity_diffuse_component].b = Math.random();
+            controls.gameover = true;
+        }
+    });
 }
 
 /** handles updating camera settings */
@@ -227,13 +649,6 @@ function updateCamera(){
      * - one idea is to have the camera point slightly forward while following the player
      * - this keeps the original 2d side-scroller view from the game, while showcasing the 3D objects
      * - also allows possible future camera interactions to be handled here
-     */
-
-    /** TODO:
-     * on every update frame,
-     *  set camera position
-     *  set what the camera should look at,
-     *      - probably player position + some units forward (forward_offset)
      */
 
     /** setup camera and projection */
@@ -269,99 +684,138 @@ function updateCamera(){
      * 
      * camera position z is also inverted for some reason
      */
-    //var model_view_matrix = lookAt(entities[camera].components[position_component].getVec3(), vec3(0, 0, 0), vec3(0, 1, 0));
     var view_matrix = lookAt(entities[camera].components[position_component].getVec3(), vec3(0, 0, 0), vec3(0, 1, 0));
     var projection_matrix = entities[camera].components[projection_component].getProjectionMatrix();
 
-    //var uModelViewMatrix_location = gl.getUniformLocation(program, "uModelViewMatrix");
     var uViewMatrix_location = gl.getUniformLocation(program, "uViewMatrix");
     var uProjectionMatrix_location = gl.getUniformLocation(program, "uProjectionMatrix");
-    //gl.uniformMatrix4fv(uModelViewMatrix_location, false, flatten(model_view_matrix));
     gl.uniformMatrix4fv(uViewMatrix_location, false, flatten(view_matrix));
     gl.uniformMatrix4fv(uProjectionMatrix_location, false, flatten(projection_matrix));
 }
 
 /** handles updating lights and position*/
 function updateLights(){
-    for(var i = 0; i < entities_active_length; i++){
-        if(entities[i].tag.endsWith("light")){
-            /** entity is a light source */
+    var player_light = getEntityCollection("player_light")[0];
+    var global_light = getEntityCollection("global_light")[0];
 
-            for(var j = 0; j < entities[i].components_active_length; j++){
-                if(entities[i].components[j].tag == "position"){
-                    /** found position component */
+    var player_light_position_component = entities[player_light].findComponent("position");
+    var player_light_ambient_component = entities[player_light].findComponent("ambient");
+    var player_light_diffuse_component = entities[player_light].findComponent("diffuse");
+    var player_light_specular_component = entities[player_light].findComponent("specular");
 
-                    if(entities[i].tag.startsWith("player")){
-                        /** player light */
+    var global_light_position_component = entities[global_light].findComponent("position");
+    var global_light_ambient_component = entities[global_light].findComponent("ambient");
+    var global_light_diffuse_component = entities[global_light].findComponent("diffuse");
+    var global_light_specular_component = entities[global_light].findComponent("specular");
 
-                        var uLightPosition_location = gl.getUniformLocation(program, "uPlayerLightPosition");
-                        gl.uniform4fv(uLightPosition_location, entities[i].components[j].getVec4());
-                    }
+    //update player_light position before sending it to the gpu
+    var player_position_component = entities[player].findComponent("position");
+    var player_scale_component = entities[player].findComponent("scale");
 
-                    if(entities[i].tag.startsWith("global")){
-                        /** global light */
+    entities[player_light].components[player_light_position_component].x = entities[player].components[player_position_component].x * entities[player].components[player_scale_component].x;
+    entities[player_light].components[player_light_position_component].y = entities[player].components[player_position_component].y * entities[player].components[player_scale_component].y;
+    entities[player_light].components[player_light_position_component].z = entities[player].components[player_position_component].z * entities[player].components[player_scale_component].z;
+    
+    var uLightPosition_location = gl.getUniformLocation(program, "uPlayerLightPosition");
+    gl.uniform4fv(uLightPosition_location, entities[player_light].components[player_light_position_component].getVec4());
+    uLightPosition_location = gl.getUniformLocation(program, "uGlobalLightPosition");
+    gl.uniform4fv(uLightPosition_location, entities[global_light].components[global_light_position_component].getVec4());
 
-                        var uLightPosition_location = gl.getUniformLocation(program, "uGlobalLightPosition");
-                        gl.uniform4fv(uLightPosition_location, entities[i].components[j].getVec4());
-                    }
-                }
+    var uLightAmbient_location = gl.getUniformLocation(program, "uPlayerLightAmbient");
+    gl.uniform4fv(uLightAmbient_location, entities[player_light].components[player_light_ambient_component].getVec4());
+    uLightAmbient_location = gl.getUniformLocation(program, "uGlobalLightAmbient");
+    gl.uniform4fv(uLightAmbient_location, entities[global_light].components[global_light_ambient_component].getVec4());
 
-                if(entities[i].components[j].tag == "ambient"){
-                    /** found ambient component */
+    var uLightDiffuse_location = gl.getUniformLocation(program, "uPlayerLightDiffuse");
+    gl.uniform4fv(uLightDiffuse_location, entities[player_light].components[player_light_diffuse_component].getVec4());
+    uLightDiffuse_location = gl.getUniformLocation(program, "uGlobalLightDiffuse");
+    gl.uniform4fv(uLightDiffuse_location, entities[global_light].components[global_light_diffuse_component].getVec4());
 
-                    if(entities[i].tag.startsWith("player")){
-                        /** player light */
+    var uLightSpecular_location = gl.getUniformLocation(program, "uPlayerLightSpecular");
+    gl.uniform4fv(uLightSpecular_location, entities[player_light].components[player_light_specular_component].getVec4());
+    uLightSpecular_location = gl.getUniformLocation(program, "uGlobalLightSpecular");
+    gl.uniform4fv(uLightSpecular_location, entities[global_light].components[global_light_specular_component].getVec4());
 
-                        var uLightAmbient_location = gl.getUniformLocation(program, "uPlayerLightAmbient");
-                        gl.uniform4fv(uLightAmbient_location, entities[i].components[j].getVec4());
-                    }
+    // deprecated, highly inefficient
+    //for(var i = 0; i < entities_active_length; i++){
+    //    if(entities[i].tag.endsWith("light")){
+    //        /** entity is a light source */
 
-                    if(entities[i].tag.startsWith("global")){
-                        /** global light */
+    //        for(var j = 0; j < entities[i].components_active_length; j++){
+    //            if(entities[i].components[j].tag == "position"){
+    //                /** found position component */
 
-                        var uLightAmbient_location = gl.getUniformLocation(program, "uGlobalLightAmbient");
-                        gl.uniform4fv(uLightAmbient_location, entities[i].components[j].getVec4());
-                    }
-                }
+    //                if(entities[i].tag.startsWith("player")){
+    //                    /** player light */
 
-                if(entities[i].components[j].tag == "diffuse"){
-                    /** found diffuse component */
+    //                    var uLightPosition_location = gl.getUniformLocation(program, "uPlayerLightPosition");
+    //                    gl.uniform4fv(uLightPosition_location, entities[i].components[j].getVec4());
+    //                }
 
-                    if(entities[i].tag.startsWith("player")){
-                        /** player light */
+    //                if(entities[i].tag.startsWith("global")){
+    //                    /** global light */
 
-                        var uLightDiffuse_location = gl.getUniformLocation(program, "uPlayerLightDiffuse");
-                        gl.uniform4fv(uLightDiffuse_location, entities[i].components[j].getVec4());
-                    }
+    //                    var uLightPosition_location = gl.getUniformLocation(program, "uGlobalLightPosition");
+    //                    gl.uniform4fv(uLightPosition_location, entities[i].components[j].getVec4());
+    //                }
+    //            }
 
-                    if(entities[i].tag.startsWith("global")){
-                        /** global light */
+    //            if(entities[i].components[j].tag == "ambient"){
+    //                /** found ambient component */
 
-                        var uLightDiffuse_location = gl.getUniformLocation(program, "uGlobalLightDiffuse");
-                        gl.uniform4fv(uLightDiffuse_location, entities[i].components[j].getVec4());
-                    }
-                }
+    //                if(entities[i].tag.startsWith("player")){
+    //                    /** player light */
 
-                if(entities[i].components[j].tag == "specular"){
-                    /** found specular component */
+    //                    var uLightAmbient_location = gl.getUniformLocation(program, "uPlayerLightAmbient");
+    //                    gl.uniform4fv(uLightAmbient_location, entities[i].components[j].getVec4());
+    //                }
 
-                    if(entities[i].tag.startsWith("player")){
-                        /** player light */
+    //                if(entities[i].tag.startsWith("global")){
+    //                    /** global light */
 
-                        var uLightSpecular_location = gl.getUniformLocation(program, "uPlayerLightSpecular");
-                        gl.uniform4fv(uLightSpecular_location, entities[i].components[j].getVec4());
-                    }
+    //                    var uLightAmbient_location = gl.getUniformLocation(program, "uGlobalLightAmbient");
+    //                    gl.uniform4fv(uLightAmbient_location, entities[i].components[j].getVec4());
+    //                }
+    //            }
 
-                    if(entities[i].tag.startsWith("global")){
-                        /** global light */
+    //            if(entities[i].components[j].tag == "diffuse"){
+    //                /** found diffuse component */
 
-                        var uLightSpecular_location = gl.getUniformLocation(program, "uGlobalLightSpecular");
-                        gl.uniform4fv(uLightSpecular_location, entities[i].components[j].getVec4());
-                    }
-                }
-            }
-        }
-    }
+    //                if(entities[i].tag.startsWith("player")){
+    //                    /** player light */
+
+    //                    var uLightDiffuse_location = gl.getUniformLocation(program, "uPlayerLightDiffuse");
+    //                    gl.uniform4fv(uLightDiffuse_location, entities[i].components[j].getVec4());
+    //                }
+
+    //                if(entities[i].tag.startsWith("global")){
+    //                    /** global light */
+
+    //                    var uLightDiffuse_location = gl.getUniformLocation(program, "uGlobalLightDiffuse");
+    //                    gl.uniform4fv(uLightDiffuse_location, entities[i].components[j].getVec4());
+    //                }
+    //            }
+
+    //            if(entities[i].components[j].tag == "specular"){
+    //                /** found specular component */
+
+    //                if(entities[i].tag.startsWith("player")){
+    //                    /** player light */
+
+    //                    var uLightSpecular_location = gl.getUniformLocation(program, "uPlayerLightSpecular");
+    //                    gl.uniform4fv(uLightSpecular_location, entities[i].components[j].getVec4());
+    //                }
+
+    //                if(entities[i].tag.startsWith("global")){
+    //                    /** global light */
+
+    //                    var uLightSpecular_location = gl.getUniformLocation(program, "uGlobalLightSpecular");
+    //                    gl.uniform4fv(uLightSpecular_location, entities[i].components[j].getVec4());
+    //                }
+    //            }
+    //        }
+    //    }
+    //}
 }
 
 /** handles loading data to the gpu and drawing vertices to the canvas */
@@ -380,6 +834,16 @@ function render(){
 
     /** clear gl buffers */
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    text_canvas.clearRect(0, 0, canvas.width, canvas.height);
+
+    /** draw score text */
+    text_canvas.fillText(score, canvas.width/2, 100);
+    if(controls.gameover){
+        text_canvas.fillText("GAME OVER", canvas.width/2, canvas.height/2);
+    }
+    if(controls.paused){
+        text_canvas.fillText("PAUSED", canvas.width/2, 200);
+    }
 
     /** load gpu data for each active entity */
     for(var i = 0; i < entities_active_length; i++){
@@ -494,6 +958,8 @@ function render(){
                     var aTexCoord_location = gl.getAttribLocation(program, "aTexCoord");
                     gl.vertexAttribPointer(aTexCoord_location, 2, gl.FLOAT, false, 0, 0);
                     gl.enableVertexAttribArray(aTexCoord_location);
+
+                    entities[i].components[texture_component].loadTexture();
                 }
             }
 
@@ -520,9 +986,16 @@ function update(){
      */
     updateEntities();
 
-    updateMovement();
-    updateGravity();
-    updateCollision();
+    if(!controls.paused && !controls.gameover){
+        if(!DEBUG_COLLISION){
+            updateMovement();
+            updateGravity();
+        }
+        else {
+            updateMovementDebug();
+        }
+        updateCollision();
+    }
     updateCamera();
     updateLights();
 
@@ -579,6 +1052,7 @@ function createEntity(t){
     var output_entity = {
         tag:t,
         components:[],
+        component_lookup_map:{},
         components_active_length:0,
         components_to_delete:[],
         /** findComponent(string ctag)
@@ -588,12 +1062,24 @@ function createEntity(t){
          * why return the index?, javascript data is pass-by-value, returning the component gives a copy of the component, not a reference to it
          */
         findComponent:function(ctag){
-            for(var i = 0; i < this.components.length; i++){
-                if(this.components[i].tag == ctag){
-                    return i;
+            if(ctag in this.component_lookup_map){
+                //component exists in the entity
+
+                if(this.component_lookup_map[ctag] < this.components_active_length){
+                    //component is active and usable
+
+                    return this.component_lookup_map[ctag];
                 }
             }
+
             return -1;
+
+            //for(var i = 0; i < this.components.length; i++){
+            //    if(this.components[i].tag == ctag){
+            //        return i;
+            //    }
+            //}
+            //return -1;
         },
         /** addComponent(object component) 
          * this function takes a component object and adds it to this entity's component list
@@ -602,17 +1088,28 @@ function createEntity(t){
         */
         addComponent:function(c){
             this.components.push(c);
+            this.component_lookup_map[c.tag] = this.components.length-1;
             return this.components.length-1; //returns a reference to the newly added component
         },
-        /** deleteComponent(int component_reference) 
+        /** deleteComponent(int component_tag) 
          * marks the component referenced to be deleted on the next update frame
         */
-        deleteComponent:function(cref){
-            this.components_to_delete.push(cref);
+        deleteComponent:function(ctag){
+            this.components_to_delete.push(ctag);
         }
     };
 
     entities.push(output_entity);
+    if(output_entity.tag in entity_lookup_map){
+        //entity tag is already in the map
+
+        entity_lookup_map[output_entity.tag].push(entities.length - 1);
+    }
+    else {
+        //brand new entity tag
+
+        entity_lookup_map[output_entity.tag] = [entities.length - 1];
+    }
     return (entities.length - 1);
 }
 
@@ -623,6 +1120,21 @@ function createEntity(t){
 */
 function deleteEntity(e){
     entities_to_delete.push(e);
+}
+
+/** getEntityCollection(string entity_tag)
+ * returns an array of references to all entities sharing the same entity_tag
+ * returns empty array if the entity_tag is not found 
+ * 
+ */
+function getEntityCollection(etag){
+    if(etag in entity_lookup_map){
+        //this entity collection exists
+
+        return entity_lookup_map[etag];
+    }
+
+    return []; //else return an empty array
 }
 
 function generateCubeVerticies(){

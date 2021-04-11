@@ -20,6 +20,10 @@ function positionComponent(xparam, yparam, zparam, wparam){
         y:yparam,
         z:zparam,
         w:wparam,
+        x_initial:xparam,
+        y_initial:yparam,
+        z_initial:zparam,
+        w_initial:wparam,
         getVec4:function(){
             return vec4(this.x, this.y, this.z, this.w);
         },
@@ -41,6 +45,10 @@ function scaleComponent(xparam, yparam, zparam, wparam){
         y:yparam,
         z:zparam,
         w:wparam,
+        x_initial:xparam,
+        y_initial:yparam,
+        z_initial:zparam,
+        w_initial:wparam,
         getVec4:function(){
             return vec4(this.x, this.y, this.z, this.w);
         },
@@ -62,6 +70,10 @@ function rotationComponent(xparam, yparam, zparam, wparam){
         y:yparam,
         z:zparam,
         w:wparam,
+        x_initial:xparam,
+        y_initial:yparam,
+        z_initial:zparam,
+        w_initial:wparam,
         getVec4:function(){
             return vec4(this.x, this.y, this.z, this.w);
         },
@@ -205,14 +217,44 @@ function textureComponent(s, t){
 
             var uTexMap_location = gl.getUniformLocation(program, "uTexMap");
             gl.uniform1i(uTexMap_location, 0);
-
-            this.loaded = true;
         }
     };
 
     output_component.image = new Image();
     output_component.image.src = s;
-    console.log(output_component);
+
+    return output_component;
+}
+
+function childrenComponent(){
+    var output_component = {
+        tag:"children",
+        children:[],
+        addChild:function(c){
+            this.children.push(c);
+        }
+    };
+
+    return output_component;
+}
+
+/** velocityComponent(x, y, z, w) 
+ * creates and returns a velocity component object
+*/
+function velocityComponent(xparam, yparam, zparam, wparam){
+    var output_component = {
+        tag:"velocity",
+        x:xparam,
+        y:yparam,
+        z:zparam,
+        w:wparam,
+        getVec4:function(){
+            return vec4(this.x, this.y, this.z, this.w);
+        },
+        getVec3:function(){
+            return vec3(this.x, this.y, this.z);
+        }
+    };
 
     return output_component;
 }
