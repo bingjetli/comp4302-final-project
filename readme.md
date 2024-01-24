@@ -23,7 +23,13 @@ W/A/S/D/Q/E : moves and rotates the viewport camera.
 
 As part of the project requirements, a video presentation was created to explain how a system of the project was implemented.
 
-![Video Presentation on Collision Detection](https://youtu.be/os8r4dsOqdU?si=MbixZL-qa9WHJOYB)
+&nbsp;
+
+Click the preview image below to view the video presentation on YouTube.
+
+
+
+[![Video Preview](https://img.youtube.com/vi/os8r4dsOqdU/maxresdefault.jpg)](https://youtu.be/os8r4dsOqdU?si=MbixZL-qa9WHJOYB)
 
 &nbsp;
 &nbsp;
