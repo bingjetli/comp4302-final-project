@@ -19,6 +19,15 @@ W/A/S/D/Q/E : moves and rotates the viewport camera.
 &nbsp;
 &nbsp;
 
+## COLLISION DETECTION IMPLEMENTATION
+
+As part of the project requirements, a video presentation was created to explain how a system of the project was implemented.
+
+![Video Presentation on Collision Detection](https://youtu.be/os8r4dsOqdU?si=MbixZL-qa9WHJOYB)
+
+&nbsp;
+&nbsp;
+
 ## LIVE DEMO
 
 [Click here to go to the live demo.](https://bingjetli.github.io/comp4302-final-project/main.html)
